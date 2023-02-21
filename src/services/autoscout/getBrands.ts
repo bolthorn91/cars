@@ -1,12 +1,9 @@
 import { getBrowserInstance } from "src/services/getBrowserInstance";
-import { toJsonFile } from "src/utils/files";
+import { navigateOnTab } from "../navigateOnTab";
 
 export const getBrands = async (): Promise<string[]> => {
     const {context, browser} = await getBrowserInstance();
-    const page = await context.newPage();
-    await page.goto('https://www.autoscout24.es/lst/');
-    const locator = page.frameLocator('#gdpr-consent-notice').locator('#save')
-    await locator.click();
+    const page = await navigateOnTab(context, `https://www.autoscout24.es/lst/`)
     await page.waitForSelector('#make-input-primary-filter')
     const brandFilter = page.locator('#make-input-primary-filter')
     await brandFilter.click();
@@ -19,6 +16,6 @@ export const getBrands = async (): Promise<string[]> => {
     })
     const rawBrands = await Promise.all(suggestionsTextPromises)
     const brands = rawBrands.filter(brand => !['MARCAS DESTACADAS', 'OTRAS MARCAS'].includes(brand))
-    return brands;
     browser.close();
+    return brands;
 }

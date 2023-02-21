@@ -9,3 +9,14 @@ export enum AUTOSCOUT_BODYWORK {
     'Van' = 'Van',
     'Pickup' = 'Pickup',
 }
+
+export enum AUTOSCOUT_COUNTRY_URL_VALUE {
+    ALEMANIA = 'D',
+    AUSTRIA = 'A',
+    BÉLGICA = 'B',    
+    ESPAÑA = 'E',
+    FRANCIA = 'F',
+    ITALIA = 'I',
+    LUXEMBURGO = 'L',
+    HOLANDA = 'NL',
+}

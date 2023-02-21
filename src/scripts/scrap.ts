@@ -1,125 +1,106 @@
-import { getBrowserInstance } from 'src/services/getBrowserInstance';
-import brands from 'src/data/autoscout/brands.json'
-import { Locator, Page } from 'playwright-core';
-import { BrowserContext } from 'playwright';
-import { toJsonFile } from 'src/utils/files';
+import { readJsonFile } from './../utils/files';
+import { getBrowserInstance } from "src/services/getBrowserInstance";
+import { toJsonFile } from "src/utils/files";
+import { AUTOSCOUT_COUNTRY_URL_VALUE } from '../enums';
+import countries from 'src/data/autoscout/countries.json';
+import { BrowserContext } from "playwright-core";
+import { chunkArray, getSynchronousLoopPromises } from 'src/utils/misc';
+import { IDescriptionInfo } from '../types';
+import { getItemsFromPage } from 'src/services/getItemsFromPage';
 
-interface IDescriptionInfo {
-  title: string;
-  version: string;
-  link: string;
-  price: string;
+const getCarsByConstraint = async (
+  brand: string,
+  model: string,
+  country: string,
+  context: BrowserContext,
+) => {
+  const url = `https://www.autoscout24.es/lst/${brand}/${model}?cy=${country}`;
+  const data = await getItemsFromPage(context, url);
+  const parsedData = data.map((item: any) => ({
+    ...item,
+    creationDate: new Date().toISOString(),
+    country,
+  }));  
+  return parsedData;
 }
 
-// const getBmw = async (): Promise<void> => {
+const parseModelStringToAutoScoutUrl = (model: string) => model.replaceAll(' ', '-').toLowerCase();
+
+const storeScrappingModels = async (
+  modelsMap: Record<string, string[]> = {},
+) => {
+  const brands = Object.keys(modelsMap);
+  const selectedBrands: string[] = brands.length > 0 
+    ? brands.map(parseModelStringToAutoScoutUrl) 
+    : readJsonFile('brands').map(parseModelStringToAutoScoutUrl);
+  const storeAllBrandModelsPromises = selectedBrands.map(brand => async () => {
+    const brandModels = modelsMap[brand] || readJsonFile(`models/${brand}`);
+    return storeBrandModels(brand, brandModels)
+  })
+  await getSynchronousLoopPromises(storeAllBrandModelsPromises)
+}
+
+// const storeComparisonScrappingData = async () => {
+//   const dir = 'src/data/autoscout/models';
+//   const readAllFiles = (dir: string) => readdirSync(dir).map((file) => readJsonFile(file));
 //   const {context, browser} = await getBrowserInstance();
-//   const page = await context.newPage();
-//   const bodyWorkArray = [1, 2, 3, 4, 6]
-//   const bodyworkUrl = encodeURIComponent(bodyWorkArray.join(','))
-//   console.log({bodyworkUrl})
-//   const bmw320Url = `https://www.autoscout24.es/lst/bmw/320?sort=price&desc=0&body=${bodyworkUrl}`;
-//   await page.goto(bmw320Url);
-//   const locator = page.frameLocator('#gdpr-consent-notice').locator('#save')
-//   await locator.click()
-//   await browser.close();
-// };
+//   const brands = readJsonFile('brands');
+//   const models = readJsonFile('models');
+//   const allBrandModelPromises = brands.map((brand, index) => async () => {
+//     const brandModels = models[index];
+//     const brandModelPromises = brandModels.map((model) => async () => storeBrandModelData(brand, model));
+//     await getSynchronousLoopPromises(brandModelPromises);
+//   });
+//   await getSynchronousLoopPromises(allBrandModelPromises);
+//   browser.close();
+// }
 
-const getRamdonNumber = (min: number, max: number): number => Math.floor(Math.random() * (max - min) + min)
-const getRandomPopularBrands = (brands: string[], maxBrands = 10): string[]  => brands.slice(0, getRamdonNumber(1, maxBrands));
+const storeComparisonData = async (
+  modelsMap: Record<string, string[]> = {},
+) => {
+  await storeScrappingModels(modelsMap);
+  // await storeComparisonScrappingData();
+}
 
-const scrappingPopularBrands = async (): Promise<IDescriptionInfo[][]> => {
-  const {context, browser} = await getBrowserInstance();
-  // const popularBrands = getRandomPopularBrands(brands);
-  const popularBrands = brands.slice(0, 2);
-  const popularBrandsUrls = popularBrands.map((brand) => `https://www.autoscout24.es/lst/${brand}`);
-  const popularBrandsUrlsPromises = popularBrandsUrls.map(async (url) => {
-    try {
-      const page = await navigateOnTab(context, url);
-      await page.waitForSelector('[class="pagination-item pagination-item--active"]');
-      const descriptionInfos: IDescriptionInfo[] = [];
-      descriptionInfos.push(...await getAllPagesItems(page, descriptionInfos));
-      page.close();
-      return descriptionInfos;
-    } catch (error) {
-      console.log({error})
-    }
-  });
+const storeBrandModelData = async (
+  brand: string,
+  model: string,
+) => {
   try {
-    const popularBrandAdsTuple = await Promise.all(popularBrandsUrlsPromises);
-    console.log({popularBrandAdsTuple});
-    return popularBrandAdsTuple;
+    const {context, browser} = await getBrowserInstance();
+    const allCountryCarsTuplePromises = countries.map((_country) => async () => getCarsByConstraint(
+      brand,
+      model,
+      AUTOSCOUT_COUNTRY_URL_VALUE[_country.toUpperCase()],
+      context
+    ))
+    const callbacks = countries.map(() => async (result: IDescriptionInfo[]) => toJsonFile(
+      JSON.stringify(result), 
+      `/tmp/ads/${brand}__${model}`
+    ));
+    await getSynchronousLoopPromises<IDescriptionInfo>(allCountryCarsTuplePromises, callbacks);
+    browser.close();
   } catch (error) {
-    
+    console.log({error})
   }
-  browser.close();
-};
-
-export const getAllPagesItems = async (
-  page: Page,
-  descriptionInfos: IDescriptionInfo[],
-  maxPages = undefined,
-): Promise<IDescriptionInfo[]> => {
-  const selectedPaginationLocator = page
-    .locator('[class="pagination-item pagination-item--active"]')
-    .locator('[class^="FilteredListPagination_button"]');
-  const currentPagination = await selectedPaginationLocator.innerText();
-  const nextPagination = (parseInt(currentPagination) + 1)
-  const itemContainers = await page.locator('[class^="ListItem_wrapper"]').all()
-  if (parseInt(currentPagination) >= 1 && ((maxPages > 0 && parseInt(currentPagination) <= maxPages) || !maxPages)) {
-    const paginationLocators = (await page.locator('[class^="FilteredListPagination_button"]').all())
-    const paginationValues = await Promise.all(paginationLocators.map(async paginationLocator => paginationLocator.innerText()));
-    const index = paginationValues.findIndex(paginationValue => (paginationValue && (parseInt(paginationValue) === nextPagination)));
-    const nextPaginationLocator = paginationLocators[index];
-    if (nextPaginationLocator && await nextPaginationLocator.isVisible()) {
-      const newDescriptionInfos = await getItemDescriptionInfo(itemContainers);
-      await nextPaginationLocator.click();
-      await page.waitForNavigation();
-      // await page.waitForURL(`**/lst/**?page=${parseInt(currentPagination) + 1}**`);
-      return getAllPagesItems(page, [...descriptionInfos, ...newDescriptionInfos]);
-    }
-  }
-  return descriptionInfos;
 }
 
-export const getItemDescriptionInfo = async (_itemContainers: Locator[]): Promise<IDescriptionInfo[]> => {
-  return await Promise.all<IDescriptionInfo>(_itemContainers.map(async itemContainer => {
-    const headerContainer = itemContainer
-      .locator('[class^="ListItem_header"]')
-      .locator('[class^="ListItem_title"]')
-    const descriptionContainer = itemContainer
-      .locator('[class^="ListItem_listing"]')
-    const link = await headerContainer.getAttribute('href')
-    const title = await headerContainer.locator('h2').isVisible() && await headerContainer.locator('h2')?.innerText();
-    const version = await headerContainer.locator('[class^="ListItem_version"]').isVisible() && await headerContainer.locator('[class^="ListItem_version"]')?.innerText()
-    const price = await descriptionContainer.locator('[class^="Price_price"]').isVisible() && await descriptionContainer.locator('[class^="Price_price"]')?.innerText()
-      return {
-        title,
-        version,
-        link,
-        price
-    }
-  }))
+const storeBrandModels = async (
+  brand: string,
+  models: string[] = []
+) => {
+  const brandModels: string[] = models.length > 0 
+    ? models 
+    : readJsonFile(`models/${brand}`);
+  const chunkedBrandModels = chunkArray(brandModels.slice(0, 2), 2);
+  const storeBrandModelDataPromises = chunkedBrandModels.map(chunkedBrandModel => async () => {
+    const storeBrandModelDataPromises = chunkedBrandModel.map(model => storeBrandModelData(brand, model))
+    return await Promise.all(storeBrandModelDataPromises)
+  })
+  await getSynchronousLoopPromises(storeBrandModelDataPromises)
 }
 
-export const navigateOnTab = async (context: BrowserContext, url: string): Promise<Page> => {
-  const page = await context.newPage();
-  await page.goto(url);
-  const consentButtonlocator1 = page.frameLocator('#gdpr-consent-notice').locator('#save')
-  if (await consentButtonlocator1.isVisible()) {
-    await consentButtonlocator1.click();
-  }
-  const consentButtonlocator2 = page.locator('[class^=_consent-popup-inner]').locator('[class^="_consent-accept"]');
-  if (await consentButtonlocator2.isVisible()) {
-    await consentButtonlocator2.click();
-  }
-  return page;
-}
+storeComparisonData({
+  audi: ['100'],
+});
 
-
-
-const getPopularBrands = async() => {
-  const popularAds = await scrappingPopularBrands();
-  popularAds.map((popularAd, index) => toJsonFile(JSON.stringify(popularAd), `popularAds${index + 1}`));
-}
-
-getPopularBrands();
