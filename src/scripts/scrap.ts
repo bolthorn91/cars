@@ -94,13 +94,13 @@ const storeBrandModels = async (
     : readJsonFile(`models/${brand}`);
   const chunkedBrandModels = chunkArray(brandModels.slice(0, 2), 2);
   const storeBrandModelDataPromises = chunkedBrandModels.map(chunkedBrandModel => async () => {
-    const storeBrandModelDataPromises = chunkedBrandModel.map(model => storeBrandModelData(brand, model))
+    const storeBrandModelDataPromises = chunkedBrandModel.map(model => storeBrandModelData(brand, model));
     return await Promise.all(storeBrandModelDataPromises)
   })
   await getSynchronousLoopPromises(storeBrandModelDataPromises)
 }
 
 storeComparisonData({
-  audi: ['100'],
+  audi: ['a3'],
 });
 
