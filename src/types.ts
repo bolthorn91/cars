@@ -1,3 +1,4 @@
+import { AUTOSCOUT_COUNTRY_URL_VALUE } from './enums';
 export interface IDescriptionInfo {
     title: string;
     version: string;
@@ -12,3 +13,8 @@ export interface IDescriptionInfo {
     consumption: string,
     emission: string
   }
+
+export interface IAd extends IDescriptionInfo {
+  creationDate: string;
+  country: AUTOSCOUT_COUNTRY_URL_VALUE
+}

@@ -30,8 +30,8 @@ const getCalculatedDateFilterNumbers = async (
         await page.close();
         const urlFilter = `fregto=${toFilter}&fregfrom=${fromFilter}`;
         const newPage = await navigateOnTab(context, `${url}&${urlFilter}`);
+        const headerTotalNumber = await getTotalItemsText(newPage);
         if (!!fromFilter) {
-            const headerTotalNumber = await getTotalItemsText(newPage);
             if (headerTotalNumber > 400) {
                 if (toFilter !== fromFilter) {
                     dateFilterNumbers.push(fromFilter + 1)
@@ -43,7 +43,14 @@ const getCalculatedDateFilterNumbers = async (
                     : currentIndex;
                 return getCalculatedDateFilterNumbers(dateFilterNumbers, nextCurrentIndex, newPage, url, context, nextIndexToCheck);
             }
+            if (headerTotalNumber === 0) {
+                dateFilterNumbers.splice(currentIndex, 1);
+                return getCalculatedDateFilterNumbers(dateFilterNumbers, indexToCheck, newPage, url, context, indexToCheck);    
+            }
             return getCalculatedDateFilterNumbers(dateFilterNumbers, indexToCheck + 1, newPage, url, context, indexToCheck + 1);
+        }
+        if (headerTotalNumber === 0) {
+            dateFilterNumbers.splice(currentIndex, 1);
         }
     }
     return dateFilterNumbers;
@@ -116,7 +123,8 @@ const useDateFilters = async (
             const dateFiltersNumbers = getInitialDateFilterNumbers();
             const newDateFilters = await getDateFiltersRanges(dateFiltersNumbers, 0, currentPage, url, context);
             const urlDateFilters = getUrlDateFilters(newDateFilters);
-            return await getItemsWithDateFilters(context, url, urlDateFilters);
+            const itemsTuple = await getItemsWithDateFilters(context, url, urlDateFilters);
+            return itemsTuple.flat();
         }
         return await getItemsFromActivePage(currentPage);
     }
@@ -126,7 +134,7 @@ const getItemsWithDateFilters = async (
     context: BrowserContext,
     url: string,
     urlDateFilters: string[],
-): Promise<IDescriptionInfo[]> => {
+): Promise<IDescriptionInfo[][]> => {
     const result = await getSynchronousLoopPromises(urlDateFilters.map(urlDateFilter => async () => {
         const urlWithDate = `${url}&${urlDateFilter}`
         const page = await navigateOnTab(context, urlWithDate);

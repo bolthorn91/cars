@@ -11,6 +11,7 @@ export const getBrowserInstance = async (setExtraHeaders = true): Promise<Browse
     const browser = await chromium.launch({
         headless: false,
     });
+    // const browser = await chromium.launch();
     const context = await browser.newContext({
         extraHTTPHeaders: setExtraHeaders ? await getHeaders() : {},
       });

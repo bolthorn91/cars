@@ -30,3 +30,22 @@ export const getLocatorText = async (locator: Locator): Promise<undefined | stri
     }
     return undefined;
 }
+
+export const getArrayMapByKey = <T2>(array: Array<any>, key: string): T2 | Record<string, any>  =>
+  array.reduce((acc, item) => {
+    if(!acc[item[key]]) {
+        return {
+            ...acc,
+            [item[key]]: [item]
+        } 
+    }
+    return {
+        ...acc,
+        [item[key]]: [...acc[item[key]], item]
+    }
+  }, {});
+
+  
+export const getUniqueListByKey = <T = any[]>(arr: T[], key: string): any => {
+    return [...new Map(arr.map(item => [item[key], item])).values()]
+}
